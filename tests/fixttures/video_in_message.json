@@ -1,0 +1,11 @@
+{
+  "file_id": "21607f1f-c2a9-429a-aae3-93544d64250f",
+  "input": {
+    "bucket": "video-fragments",
+    "key": "test-key"
+  },
+  "output": {
+    "bucket": "video-fragments",
+    "prefix": "21607f1f-c2a9-429a-aae3-93544d64250f"
+  }
+}

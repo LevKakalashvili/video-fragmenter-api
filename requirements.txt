@@ -1,0 +1,11 @@
+aioboto3==15.5.0
+dishka==1.8.0
+dishka-faststream>=0.1.0
+faststream[kafka]==0.6.6
+pydantic==2.12.5
+pydantic-core==2.41.5
+pydantic-settings==2.13.1
+python-dotenv==1.2.1
+loguru==0.7.3
+uvicorn==0.41.0
+
