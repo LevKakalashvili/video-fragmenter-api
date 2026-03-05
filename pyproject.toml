@@ -1,0 +1,64 @@
+[project]
+name = "video-fragmenter-api"
+version = "0.1.0"
+description = "API service for high-performance video fragmentation with Kafka and S3/MinIO integration."
+readme = "README.md"
+requires-python = ">=3.11"
+dependencies = [
+    "asyncpg>=0.31.0",
+    "dishka[faststream]>=1.8.0",
+    "fastapi>=0.133.1",
+    "faststream[kafka]>=0.6.6",
+    "loguru>=0.7.3",
+    "pydantic-settings>=2.13.1",
+    "uvicorn>=0.41.0",
+]
+
+[tool.ruff]
+line-length = 120
+target-version = "py312"
+
+exclude = [
+    "migrations/",
+    "**/migrations/",
+    "build/",
+    "dist/",
+    "env/",
+    ".git/",
+    "*.pyc",
+    "__pycache__/"
+]
+
+output-format = "full"
+
+[tool.ruff.format]
+docstring-code-format = true
+docstring-code-line-length = 120
+quote-style = "double"
+
+[tool.pyupgrade]
+py312-plus = true
+
+[tool.ruff.lint.per-file-ignores]
+"__init__.py" = ["F401"]
+
+[tool.ruff.lint.flake8-quotes]
+docstring-quotes = "double"
+
+[tool.ruff.lint]
+select = [
+    "E",  # Ошибки
+    "F",  # Форматирование
+    "W",  # Предупреждения
+    "I",  # Информационные сообщения
+    "B",  # bugbear
+    "C4", # Сложность кода
+    "UP",  # Правила pyupgrade
+]
+
+ignore = [
+    "E501",  # line length errors
+    "C901",  # cyclomatic complexity errors
+    "B008",  # errors related to specific bugbear codes
+    "W191",  # indentation errors (tabs vs spaces)
+]
