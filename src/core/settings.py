@@ -48,6 +48,9 @@ class KafkaSettings(_BaseEnvSettings):
     bootstrap_servers: str
     log4j_root_loglevel: str = "INFO"
     tools_log4j_loglevel: str = "INFO"
+    topic_in: str = "video.jobs"
+    topic_progress: str = "video.progress"
+    group_id: str = "video-fragmenter"
 
 
 class MinioSettings(_BaseEnvSettings):
@@ -61,6 +64,11 @@ class MinioSettings(_BaseEnvSettings):
     root_user: str
     root_password: str
     log_level: str = "info"
+    endpoint_url: str = "http://minio:9000"
+    region_name: str = "us-east-1"
+    addressing_style: str = "path"
+    secure: bool = False
+    bucket: str
 
 
 class Settings(_BaseEnvSettings):

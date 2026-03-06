@@ -1,3 +1,9 @@
+DOCKER_COMPOSE_LOCAL=./docker-compose.local.yaml
+ENV_LOCAL=.env
+
+up-local:
+	docker compose --env-file $(ENV_LOCAL) -f $(DOCKER_COMPOSE_LOCAL) up -d --build
+
 format:
 	ruff format --config=./pyproject.toml
 	ruff check --fix --preview --unsafe-fixes --config=./pyproject.toml
