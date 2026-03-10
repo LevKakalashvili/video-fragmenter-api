@@ -4,6 +4,8 @@ from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field
 
+from src.core.settings import settings
+
 
 class KafkaJobInputLocationSchema(BaseModel):
     """Источник входного файла в S3/MinIO."""
@@ -22,9 +24,9 @@ class KafkaJobOutputLocationSchema(BaseModel):
 class KafkaJobChunkingSchema(BaseModel):
     """Параметры фрагментации видео."""
 
-    type: Literal["time"] = "time"
-    seconds: int = Field(default=30, ge=1)
-    mode: str = Field(default="fast_keyframe_aligned", min_length=1)
+    type: Literal["time"] = Field(default_factory=lambda: settings.app.chunk_type)
+    seconds: int = Field(default_factory=lambda: settings.app.chunk_seconds, ge=1)
+    mode: str = Field(default_factory=lambda: settings.app.chunk_mode, min_length=1)
 
 
 class KafkaJobLimitsSchema(BaseModel):

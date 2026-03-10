@@ -1,5 +1,6 @@
 from dishka import Provider, Scope, make_async_container, provide
 
+from src.core.settings import settings
 from src.infra.broker.consumer import KafkaConsumer
 from src.infra.broker.kafka import kafka_consumer, kafka_producer
 from src.infra.broker.producer import KafkaProducer
@@ -7,6 +8,7 @@ from src.infra.s3.repository import S3Repository
 from src.services.chunking.registry import ChunkingStrategyRegistry
 from src.services.chunking.resolver import ChunkingStrategyResolver
 from src.services.chunking.strategies.fast_keyframe_aligned import FastKeyframeAlignedChunkingStrategy
+from src.services.in_memory_scheduler import InMemoryVideoScheduler
 from src.services.s3_storage import S3StorageService
 from src.services.video_job import VideoJobService
 
@@ -27,6 +29,10 @@ class KafkaProvider(Provider):
         registry = ChunkingStrategyRegistry()
         registry.register(FastKeyframeAlignedChunkingStrategy())
         return registry
+
+    @provide(scope=Scope.APP)
+    def get_in_memory_video_scheduler(self) -> InMemoryVideoScheduler:
+        return InMemoryVideoScheduler(max_videos_in_progress=settings.app.max_videos_in_progress)
 
 
 def get_service_provider() -> Provider:

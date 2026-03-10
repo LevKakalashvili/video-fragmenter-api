@@ -7,9 +7,7 @@ api_router = APIRouter()
 
 _current_dir = Path(__file__).resolve().parent
 _module_names = sorted(
-    module_path.stem
-    for module_path in _current_dir.glob("*_router.py")
-    if module_path.name != "__init__.py"
+    module_path.stem for module_path in _current_dir.glob("*_router.py") if module_path.name != "__init__.py"
 )
 
 for module_name in _module_names:

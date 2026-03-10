@@ -1,4 +1,5 @@
 import sys
+from typing import Literal
 
 from loguru import logger
 from pydantic import Field, ValidationError
@@ -23,20 +24,20 @@ class AppSettings(_BaseEnvSettings):
     version: str = "0.0.1"
     debug: bool = False
 
-    # Общий лимит конкурентных job внутри инстанса (legacy-параметр).
-    max_jobs: int = 1
     # Лимит одновременно обрабатываемых видео на инстанс (K).
     max_videos_in_progress: int = 1
     # Лимит параллельных chunk subprocess для одного видео (M).
-    max_chunk_processes_per_video: int = 1
+    max_chunk_processes_per_video: int = 20
     # Максимум одновременных загрузок чанков в S3/MinIO.
-    max_upload_concurrency: int = 4
-    # Размер чанка по умолчанию в секундах (legacy-параметр).
-    chunk_seconds: int = 30
-    # Основной дефолт размера чанка в секундах для новых сценариев.
-    default_chunk_seconds: int = 30
-    # Максимально допустимый размер входного файла в байтах.
-    max_file_bytes: int = 524288000
+    max_upload_concurrency: int = 20
+    # Размер чанка по умолчанию в секундах.
+    chunk_seconds: int = 2 * 60
+    # Тип чанкирования по умолчанию для входящих Kafka jobs без блока chunking.
+    chunk_type: Literal["time"] = "time"
+    # Режим чанкирования по умолчанию для входящих Kafka jobs без блока chunking.
+    chunk_mode: str = "fast_keyframe_aligned"
+    # Максимально допустимый размер входного файла в байтах (500 MB).
+    max_file_bytes: int = 500 * 1024 * 1024
     # Корень временного каталога для локальных артефактов обработки.
     tmp_dir_root: str = "/tmp"
     ffmpeg_command: str = "ffmpeg"
