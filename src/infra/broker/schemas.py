@@ -58,6 +58,7 @@ class KafkaVideoJobProgressEventSchema(BaseModel):
     chunk_key: str
     chunks_done: int = Field(ge=0)
     chunks_total_estimate: int = Field(ge=0)
+    error: str = ""
     ts: datetime
 
 
@@ -69,6 +70,7 @@ class KafkaVideoJobFinalEventSchema(BaseModel):
     status: Literal["completed", "failed"]
     chunks_total: int = Field(ge=0)
     manifest_key: str
+    error: str = ""
     ts: datetime
 
 

@@ -23,6 +23,31 @@ class S3FileTooLargeError(DomainError):
         self.max_size = max_size
 
 
+class UnsupportedVideoFormatError(DomainError):
+    """Формат входного видео не поддерживается сервисом."""
+
+    def __init__(
+        self,
+        bucket: str,
+        key: str,
+        file_extension: str | None,
+        content_type: str | None,
+        supported_formats: tuple[str, ...],
+    ):
+        supported = ", ".join(supported_formats) if supported_formats else "<empty>"
+        detected = content_type or "<missing>"
+        extension = file_extension or "<missing>"
+        super().__init__(
+            f"Неподдерживаемый формат видео для s3://{bucket}/{key}. "
+            f"Extension='{extension}', Content-Type='{detected}'. Поддерживаемые форматы: {supported}"
+        )
+        self.bucket = bucket
+        self.key = key
+        self.file_extension = file_extension
+        self.content_type = content_type
+        self.supported_formats = supported_formats
+
+
 class UnsupportedChunkingModeError(DomainError):
     """Неподдерживаемый режим фрагментации видео."""
 

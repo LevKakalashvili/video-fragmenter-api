@@ -2,22 +2,17 @@ import asyncio
 import math
 import shutil
 import tempfile
-from datetime import UTC, datetime
 from pathlib import Path
 from uuid import UUID
 
 from loguru import logger
 
 from src.core.settings import settings
-from src.infra.broker.producer import KafkaProducer
-from src.infra.broker.schemas import (
-    KafkaVideoJobFinalEventSchema,
-    KafkaVideoJobInSchema,
-    KafkaVideoJobProgressEventSchema,
-)
+from src.infra.broker.schemas import KafkaVideoJobInSchema
 from src.infra.s3.repository import S3ObjectMeta
 from src.services.chunking.base import ChunkingStrategy
 from src.services.chunking.resolver import ChunkingStrategyResolver
+from src.services.job_state import JobStateService
 from src.services.s3_storage import S3StorageService
 
 
@@ -31,20 +26,20 @@ class VideoJobService:
     - запуск ffprobe/ffmpeg;
     - параллельную обработку чанков с лимитом `M`;
     - загрузку чанков и manifest в S3;
-    - публикацию progress/final событий в Kafka;
+    - публикацию состояния через JobStateService;
     - гарантированную очистку временных артефактов.
     """
 
     def __init__(
         self,
-        producer: KafkaProducer,
         s3_storage: S3StorageService,
         chunking_strategy_resolver: ChunkingStrategyResolver,
+        job_state_service: JobStateService,
     ):
         """Инициализирует зависимости сервиса обработки видео."""
-        self.producer = producer
         self.s3_storage = s3_storage
         self.chunking_strategy_resolver = chunking_strategy_resolver
+        self.job_state_service = job_state_service
         # Все временные артефакты задачи складываются в системный temp-каталог.
         self.tmp_root = Path(tempfile.gettempdir())
 
@@ -63,42 +58,13 @@ class VideoJobService:
 
         return normalized_command
 
-    async def publish_progress_event(self, event: KafkaVideoJobProgressEventSchema) -> None:
-        """Публикует промежуточное событие прогресса в Kafka."""
-        await self.producer.publish_progress(
-            event.model_dump(mode="json"),
-            key=str(event.file_id),
-        )
-
-    async def publish_final_event(self, event: KafkaVideoJobFinalEventSchema) -> None:
-        """Публикует финальное событие задачи в Kafka."""
-        await self.producer.publish_progress(
-            event.model_dump(mode="json"),
-            key=str(event.file_id),
-        )
-
     async def publish_started_event(self, job_id: UUID, file_id: UUID, chunks_total_estimate: int) -> None:
-        """Формирует и публикует событие старта обработки."""
-        # started-событие фиксирует, что job прошёл pre-check шаги и принят к выполнению.
-        event = KafkaVideoJobProgressEventSchema(
+        """Публикует событие старта обработки через единый state service."""
+        await self.job_state_service.mark_job_started(
             job_id=job_id,
             file_id=file_id,
-            status="started",
-            chunk_index=0,
-            chunk_key="",
-            chunks_done=0,
             chunks_total_estimate=chunks_total_estimate,
-            ts=datetime.now(UTC),
         )
-        await self.publish_progress_event(event)
-
-    async def estimate_chunks_total(self, input_path: Path, chunk_seconds: int) -> int:
-        """Оценивает общее число чанков по длительности видео через ffprobe."""
-        if chunk_seconds <= 0:
-            raise ValueError("chunk_seconds должен быть > 0")
-        duration_seconds = await self.get_video_duration_seconds(input_path=input_path)
-        # Всегда минимум 1 чанк, даже для очень коротких роликов.
-        return max(1, math.ceil(duration_seconds / chunk_seconds))
 
     async def get_video_duration_seconds(self, input_path: Path) -> float:
         """Возвращает длительность видео (секунды) через ffprobe."""
@@ -201,16 +167,17 @@ class VideoJobService:
         output_dir: Path | None = None
         # Счётчик фактически завершённых и загруженных чанков.
         chunks_done = 0
+        chunks_total_estimate = 0
 
-        # HEAD-проверка размера перед download, чтобы не качать файл целиком
-        await self.validate_input_size(
-            bucket=payload.input.bucket,
-            input_key=payload.input.key,
-            max_bytes=payload.limits.max_bytes,
-        )
-        # Выбираем chunking-стратегию согласно mode из входного сообщения.
-        chunking_strategy = self.resolve_chunking_strategy(mode=payload.chunking.mode)
         try:
+            # HEAD-проверка размера и content-type перед download, чтобы не качать файл целиком.
+            await self.validate_input_size(
+                bucket=payload.input.bucket,
+                input_key=payload.input.key,
+                max_bytes=payload.limits.max_bytes,
+            )
+            # Выбираем chunking-стратегию согласно mode из входного сообщения.
+            chunking_strategy = self.resolve_chunking_strategy(mode=payload.chunking.mode)
             # Копируем исходный файл в tmp-каталог конкретной задачи.
             local_video_path = await self.download_input_video(
                 job_id=job_id,
@@ -255,43 +222,24 @@ class VideoJobService:
                     "chunks_total": chunks_done,
                 },
             )
-            await self.publish_final_event(
-                KafkaVideoJobFinalEventSchema(
-                    job_id=job_id,
-                    file_id=payload.file_id,
-                    status="completed",
-                    chunks_total=chunks_done,
-                    manifest_key=manifest_key,
-                    ts=datetime.now(UTC),
-                )
+            await self.job_state_service.mark_job_completed(
+                job_id=job_id,
+                file_id=payload.file_id,
+                chunks_done=chunks_done,
+                manifest_key=manifest_key,
             )
             logger.info(
                 "Видео job завершен: job_id={}, file_id={}, chunks_done={}", job_id, payload.file_id, chunks_done
             )
-        except Exception:
+        except Exception as exc:
             # При любой ошибке публикуем failed-события и отдаём исключение выше,
             # чтобы subscriber/scheduler могли корректно зафиксировать провал job.
-            await self.publish_final_event(
-                KafkaVideoJobFinalEventSchema(
-                    job_id=job_id,
-                    file_id=payload.file_id,
-                    status="failed",
-                    chunks_total=chunks_done,
-                    manifest_key="",
-                    ts=datetime.now(UTC),
-                )
-            )
-            await self.publish_progress_event(
-                KafkaVideoJobProgressEventSchema(
-                    job_id=job_id,
-                    file_id=payload.file_id,
-                    status="failed",
-                    chunk_index=0,
-                    chunk_key="",
-                    chunks_done=chunks_done,
-                    chunks_total_estimate=chunks_done,
-                    ts=datetime.now(UTC),
-                )
+            await self.job_state_service.mark_job_failed(
+                job_id=job_id,
+                file_id=payload.file_id,
+                chunks_done=chunks_done,
+                chunks_total_estimate=chunks_total_estimate,
+                error_text=str(exc),
             )
             raise
         finally:
@@ -343,47 +291,64 @@ class VideoJobService:
                         # Сентинел: завершаем worker без ошибки.
                         return
 
-                    # Старт каждого чанка вычисляем детерминированно от индекса.
-                    chunk_start_seconds = chunk_index * payload.chunking.seconds
-                    local_chunk_path = output_dir / f"chunk_{chunk_index:06d}.mp4"
-                    # Строим ffmpeg-команду "один чанк = один subprocess".
-                    ffmpeg_command = chunking_strategy.build_ffmpeg_chunk_command(
-                        input_path=input_path,
-                        output_path=local_chunk_path,
-                        chunk_seconds=payload.chunking.seconds,
-                        chunk_start_seconds=chunk_start_seconds,
-                    )
-                    ffmpeg_command = self.prepare_local_unix_command(input_path=input_path, command=ffmpeg_command)
-
-                    # Запускаем ffmpeg subprocess для конкретного чанка.
-                    process = await asyncio.create_subprocess_exec(
-                        *ffmpeg_command,
-                        stdout=asyncio.subprocess.DEVNULL,
-                        stderr=asyncio.subprocess.PIPE,
-                    )
-                    _, stderr = await process.communicate()
-                    if process.returncode != 0:
-                        error_text = stderr.decode("utf-8", errors="replace").strip()
-                        raise RuntimeError(
-                            f"Ошибка ffmpeg (code={process.returncode}) для chunk={chunk_index}: {error_text}"
-                        )
-
-                    # Upload ограничиваем отдельным семафором, чтобы не перегружать S3.
-                    async with upload_limit:
-                        chunk_key = await self.upload_chunk(
-                            output_bucket=payload.output.bucket,
-                            output_prefix=payload.output.prefix,
+                    try:
+                        # Старт каждого чанка вычисляем детерминированно от индекса.
+                        chunk_start_seconds = chunk_index * payload.chunking.seconds
+                        local_chunk_path = output_dir / f"chunk_{chunk_index:06d}.mp4"
+                        await self.job_state_service.mark_chunk_processing(
+                            job_id=job_id,
+                            file_id=payload.file_id,
                             chunk_index=chunk_index,
-                            local_path=local_chunk_path,
+                            chunks_total_estimate=chunks_total_estimate,
                         )
+                        # Строим ffmpeg-команду "один чанк = один subprocess".
+                        ffmpeg_command = chunking_strategy.build_ffmpeg_chunk_command(
+                            input_path=input_path,
+                            output_path=local_chunk_path,
+                            chunk_seconds=payload.chunking.seconds,
+                            chunk_start_seconds=chunk_start_seconds,
+                        )
+                        ffmpeg_command = self.prepare_local_unix_command(input_path=input_path, command=ffmpeg_command)
 
-                    # Локальный чанк больше не нужен после успешной загрузки.
-                    self.remove_local_file(local_chunk_path)
-                    # После upload чанк "готов к публикации", но само событие отправим
-                    # отдельной корутиной строго по chunk_index.
-                    async with ready_chunks_condition:
-                        ready_chunks[chunk_index] = chunk_key
-                        ready_chunks_condition.notify_all()
+                        # Запускаем ffmpeg subprocess для конкретного чанка.
+                        process = await asyncio.create_subprocess_exec(
+                            *ffmpeg_command,
+                            stdout=asyncio.subprocess.DEVNULL,
+                            stderr=asyncio.subprocess.PIPE,
+                        )
+                        _, stderr = await process.communicate()
+                        if process.returncode != 0:
+                            error_text = stderr.decode("utf-8", errors="replace").strip()
+                            raise RuntimeError(
+                                f"Ошибка ffmpeg (code={process.returncode}) для chunk={chunk_index}: {error_text}"
+                            )
+
+                        # Upload ограничиваем отдельным семафором, чтобы не перегружать S3.
+                        async with upload_limit:
+                            chunk_key = await self.upload_chunk(
+                                output_bucket=payload.output.bucket,
+                                output_prefix=payload.output.prefix,
+                                chunk_index=chunk_index,
+                                local_path=local_chunk_path,
+                            )
+
+                        # Локальный чанк больше не нужен после успешной загрузки.
+                        self.remove_local_file(local_chunk_path)
+                        # После upload чанк "готов к публикации", но само событие отправим
+                        # отдельной корутиной строго по chunk_index.
+                        async with ready_chunks_condition:
+                            ready_chunks[chunk_index] = chunk_key
+                            ready_chunks_condition.notify_all()
+                    except Exception as exc:
+                        await self.job_state_service.mark_chunk_failed(
+                            job_id=job_id,
+                            file_id=payload.file_id,
+                            chunk_index=chunk_index,
+                            error_text=str(exc),
+                            chunks_done=chunks_done,
+                            chunks_total_estimate=chunks_total_estimate,
+                        )
+                        raise
                 finally:
                     # task_done обязателен в finally: и при успехе, и при ошибке.
                     chunk_queue.task_done()
@@ -398,17 +363,13 @@ class VideoJobService:
                     chunk_key = ready_chunks.pop(chunk_index)
 
                 chunks_done += 1
-                await self.publish_progress_event(
-                    KafkaVideoJobProgressEventSchema(
-                        job_id=job_id,
-                        file_id=payload.file_id,
-                        status="chunk_uploaded",
-                        chunk_index=chunk_index,
-                        chunk_key=chunk_key,
-                        chunks_done=chunks_done,
-                        chunks_total_estimate=chunks_total_estimate,
-                        ts=datetime.now(UTC),
-                    )
+                await self.job_state_service.mark_chunk_uploaded(
+                    job_id=job_id,
+                    file_id=payload.file_id,
+                    chunk_index=chunk_index,
+                    chunk_key=chunk_key,
+                    chunks_done=chunks_done,
+                    chunks_total_estimate=chunks_total_estimate,
                 )
                 logger.info(
                     f"Chunk обработан: job_id={job_id}, file_id={payload.file_id}, "

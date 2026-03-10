@@ -1,14 +1,17 @@
 from dishka import Provider, Scope, make_async_container, provide
+from redis.asyncio import Redis
 
 from src.core.settings import settings
 from src.infra.broker.consumer import KafkaConsumer
 from src.infra.broker.kafka import kafka_consumer, kafka_producer
 from src.infra.broker.producer import KafkaProducer
+from src.infra.redis.client import redis_client
 from src.infra.s3.repository import S3Repository
 from src.services.chunking.registry import ChunkingStrategyRegistry
 from src.services.chunking.resolver import ChunkingStrategyResolver
 from src.services.chunking.strategies.fast_keyframe_aligned import FastKeyframeAlignedChunkingStrategy
 from src.services.in_memory_scheduler import InMemoryVideoScheduler
+from src.services.job_state import JobStateService
 from src.services.s3_storage import S3StorageService
 from src.services.video_job import VideoJobService
 
@@ -23,6 +26,14 @@ class KafkaProvider(Provider):
     @provide(scope=Scope.APP)
     def get_consumer(self) -> KafkaConsumer:
         return kafka_consumer
+
+    @provide(scope=Scope.APP)
+    def get_redis_client(self) -> Redis:
+        return redis_client
+
+    @provide(scope=Scope.APP)
+    def get_job_state_service(self, producer: KafkaProducer, redis: Redis) -> JobStateService:
+        return JobStateService(producer=producer, redis=redis)
 
     @provide(scope=Scope.APP)
     def get_chunking_strategy_registry(self) -> ChunkingStrategyRegistry:

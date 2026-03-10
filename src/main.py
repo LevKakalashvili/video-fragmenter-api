@@ -11,6 +11,7 @@ from src.core.logger import init_logging
 from src.core.settings import settings
 from src.di import container
 from src.infra.broker.kafka import kafka, kafka_consumer, kafka_producer
+from src.infra.redis.client import redis_client
 from src.infra.s3.repository import S3Repository
 
 try:
@@ -108,6 +109,7 @@ async def run() -> None:
         await interceptor.run(lambda: stream_app.run(sleep_time=settings.console.sleep_time_seconds))
     finally:
         await kafka_producer.stop()
+        await redis_client.aclose()
 
 
 def main() -> None:

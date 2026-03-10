@@ -7,6 +7,7 @@ from loguru import logger
 from src.core.settings import settings
 from src.infra.broker.schemas import KafkaVideoJobInSchema
 from src.services.in_memory_scheduler import InMemoryVideoScheduler
+from src.services.job_state import JobStateService
 from src.services.video_job import VideoJobService
 
 try:
@@ -33,9 +34,11 @@ async def handle_video_job_event(
     data: KafkaVideoJobInSchema,
     video_job_service: FromDishka[VideoJobService],
     video_scheduler: FromDishka[InMemoryVideoScheduler],
+    job_state_service: FromDishka[JobStateService],
 ) -> None:
     job_id = uuid4()
     logger.info(f"Получено событие задачи на фрагментацию видео: {data}, сгенерированный job_id={job_id}")
+    await job_state_service.reset_job_state(job_id=job_id, payload=data)
     logger.info(
         "Задача поставлена в in-memory scheduler: job_id={}, file_id={}, queue_limit_K={}",
         job_id,

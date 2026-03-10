@@ -2,7 +2,7 @@ import sys
 from typing import Literal
 
 from loguru import logger
-from pydantic import Field, ValidationError
+from pydantic import Field, ValidationError, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 from src.core.utils import _env_name_from_error_loc, _translate_error_message, _translate_error_type
@@ -38,10 +38,27 @@ class AppSettings(_BaseEnvSettings):
     chunk_mode: str = "fast_keyframe_aligned"
     # Максимально допустимый размер входного файла в байтах (500 MB).
     max_file_bytes: int = 500 * 1024 * 1024
+    # Поддерживаемые видеоформаты входных файлов.
+    supported_video_formats: list[str] = Field(default_factory=lambda: ["mp4"])
     # Корень временного каталога для локальных артефактов обработки.
     tmp_dir_root: str = "/tmp"
     ffmpeg_command: str = "ffmpeg"
     ffprobe_command: str = "ffprobe"
+
+    @field_validator("supported_video_formats", mode="before")
+    @classmethod
+    def _normalize_supported_video_formats(cls, value: object) -> object:
+        if isinstance(value, str):
+            return [item.strip() for item in value.split(",") if item.strip()]
+        return value
+
+    @field_validator("supported_video_formats")
+    @classmethod
+    def _validate_supported_video_formats(cls, value: list[str]) -> list[str]:
+        normalized = [item.strip().lower() for item in value if item.strip()]
+        if not normalized:
+            raise ValueError("Список supported_video_formats не должен быть пустым")
+        return normalized
 
 
 class ConsoleSettings(_BaseEnvSettings):
