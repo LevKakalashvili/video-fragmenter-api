@@ -106,7 +106,9 @@ async def run() -> None:
     await _run_startup_resource_checks()
     await kafka_producer.start()
     try:
-        await interceptor.run(lambda: stream_app.run(sleep_time=settings.console.sleep_time_seconds))
+        await interceptor.run(
+            lambda: stream_app.run(sleep_time=settings.console.sleep_time_seconds)
+        )
     finally:
         await kafka_producer.stop()
         await redis_client.aclose()

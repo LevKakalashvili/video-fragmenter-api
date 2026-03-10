@@ -38,7 +38,9 @@ class RedisJobStateHandler(JobStateHandler):
 
     async def _save_job_document(self, job_id: UUID, file_id: UUID, document: dict) -> None:
         await self.redis.set(
-            self._job_document_key(job_id), json.dumps(document, ensure_ascii=False), ex=self.ttl_seconds
+            self._job_document_key(job_id),
+            json.dumps(document, ensure_ascii=False),
+            ex=self.ttl_seconds,
         )
         await self.redis.expire(self._active_job_key(file_id), self.ttl_seconds)
 
@@ -62,7 +64,8 @@ class RedisJobStateHandler(JobStateHandler):
         await self.redis.delete(self._active_job_key(file_id))
 
     async def reset_job_state(self, job_id: UUID, payload: KafkaVideoJobInSchema) -> None:
-        # При повторном запуске той же file_id удаляем старый JSON-документ и назначаем новую active job.
+        # При повторном запуске той же file_id удаляем старый JSON-документ
+        # и назначаем новую active job.
         file_id = payload.file_id
         active_job_key = self._active_job_key(file_id)
         old_job_id = await self.redis.get(active_job_key)
@@ -94,7 +97,9 @@ class RedisJobStateHandler(JobStateHandler):
         }
         await self._save_job_document(job_id=job_id, file_id=file_id, document=document)
 
-    async def mark_job_started(self, job_id: UUID, file_id: UUID, chunks_total_estimate: int) -> None:
+    async def mark_job_started(
+        self, job_id: UUID, file_id: UUID, chunks_total_estimate: int
+    ) -> None:
         if not await self.is_current_job(file_id=file_id, job_id=job_id):
             return
 
@@ -219,7 +224,9 @@ class RedisJobStateHandler(JobStateHandler):
         )
         await self._save_job_document(job_id=job_id, file_id=file_id, document=document)
 
-    async def mark_job_completed(self, job_id: UUID, file_id: UUID, chunks_done: int, manifest_key: str) -> None:
+    async def mark_job_completed(
+        self, job_id: UUID, file_id: UUID, chunks_done: int, manifest_key: str
+    ) -> None:
         if not await self.is_current_job(file_id=file_id, job_id=job_id):
             return
 

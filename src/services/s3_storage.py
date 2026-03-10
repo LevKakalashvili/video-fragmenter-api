@@ -1,4 +1,3 @@
-import json
 from pathlib import Path
 
 from src.core.settings import settings
@@ -99,20 +98,4 @@ class S3StorageService:
             key=object_key,
             source=local_path,
             content_type="video/mp4",
-        )
-
-    async def upload_manifest(
-        self,
-        bucket: str,
-        object_key: str,
-        data: dict,
-    ) -> None:
-        """Сериализует и загружает data (dict -> json file)."""
-        # Manifest формируется в памяти, без промежуточного временного файла.
-        payload = json.dumps(data, ensure_ascii=False).encode("utf-8")
-        await self.repository.put_object_bytes(
-            bucket=bucket,
-            key=object_key,
-            payload=payload,
-            content_type="application/json",
         )

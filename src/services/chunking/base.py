@@ -8,10 +8,6 @@ class ChunkingStrategy(ABC):
     mode: str
 
     @abstractmethod
-    def build_ffmpeg_command(self, input_path: Path, output_dir: Path, chunk_seconds: int) -> list[str]:
-        """Собирает ffmpeg-команду для фрагментации входного файла."""
-
-    @abstractmethod
     def build_ffmpeg_chunk_command(
         self,
         input_path: Path,

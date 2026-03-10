@@ -17,7 +17,7 @@ dependencies = [
 ]
 
 [tool.ruff]
-line-length = 120
+line-length = 100
 target-version = "py312"
 
 exclude = [
@@ -35,7 +35,7 @@ output-format = "full"
 
 [tool.ruff.format]
 docstring-code-format = true
-docstring-code-line-length = 120
+docstring-code-line-length = 100
 quote-style = "double"
 
 [tool.pyupgrade]
@@ -59,7 +59,6 @@ select = [
 ]
 
 ignore = [
-    "E501",  # line length errors
     "C901",  # cyclomatic complexity errors
     "B008",  # errors related to specific bugbear codes
     "W191",  # indentation errors (tabs vs spaces)

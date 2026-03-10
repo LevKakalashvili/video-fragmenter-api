@@ -7,26 +7,33 @@ networks:
     external: true
 
 services:
-#  api:
-#    build:
-#      context: .
-#      dockerfile: ./docker/Dockerfile
-#    container_name: api
-#    command: bash -c "alembic upgrade heads && uvicorn src.main:app --proxy-headers --host 0.0.0.0 --port 80 --use-colors --reload"
-#    volumes:
-#      - ./:/backend
-#    tmpfs:
-#      - /tmp:size=512m,mode=1777
-#    ports:
-#      - '5000:80'
-#    depends_on:
-#      kafka:
-#        condition: service_healthy
-
+  video-fragmenter:
+    env_file:
+      - ./.env
+    build:
+      context: .
+      dockerfile: ./docker/Dockerfile
+      target: local
+    container_name: video-fragmenter
+    volumes:
+      - ./:/opt/app
+    tmpfs:
+      - /tmp:size=512m,mode=1777
+    depends_on:
+      kafka:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      minio:
+        condition: service_healthy
+    networks:
+      - vfs_network
 
   kafka:
     image: apache/kafka:latest
     container_name: kafka
+    env_file:
+      - ./.env
     ports:
       - "9092:9092"
     environment:
@@ -58,6 +65,8 @@ services:
   kafka-rest:
     image: confluentinc/cp-kafka-rest:latest
     container_name: kafka-rest
+    env_file:
+      - ./.env
     depends_on:
       kafka:
         condition: service_healthy
@@ -73,6 +82,8 @@ services:
   kafka-ui:
     image: provectuslabs/kafka-ui:latest
     container_name: kafka-ui
+    env_file:
+      - ./.env
     ports:
       - "8080:8080"
     environment:
@@ -85,6 +96,8 @@ services:
   kafka-init:
     image: apache/kafka:latest
     container_name: kafka-init
+    env_file:
+      - ./.env
     depends_on:
       kafka:
         condition: service_healthy
@@ -99,6 +112,8 @@ services:
   minio:
     image: minio/minio:latest
     container_name: minio
+    env_file:
+      - ./.env
     command: server /data --console-address ":9001"
     ports:
       - "9000:9000"
@@ -121,6 +136,8 @@ services:
   minio-init:
     image: minio/mc:latest
     container_name: minio-init
+    env_file:
+      - ./.env
     depends_on:
       minio:
         condition: service_healthy
@@ -135,6 +152,8 @@ services:
   redis:
     image: redis:7-alpine
     container_name: redis
+    env_file:
+      - ./.env
     ports:
       - "${REDIS_PORT:-6379}:6379"
     command: [ "redis-server", "--save", "60", "1", "--loglevel", "warning" ]

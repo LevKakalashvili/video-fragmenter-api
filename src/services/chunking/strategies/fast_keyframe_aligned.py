@@ -9,29 +9,33 @@ class FastKeyframeAlignedChunkingStrategy(ChunkingStrategy):
 
     mode = "fast_keyframe_aligned"
 
-    def build_ffmpeg_command(self, input_path: Path, output_dir: Path, chunk_seconds: int) -> list[str]:
-        """Строит ffmpeg-команду для segment muxer с `-c copy`."""
-        output_pattern = output_dir / "chunk_%06d.mp4"
+    def build_ffmpeg_chunk_command(
+        self,
+        input_path: Path,
+        output_path: Path,
+        chunk_seconds: int,
+        chunk_start_seconds: int,
+    ) -> list[str]:
+        """Строит ffmpeg-команду для одного чанка без перекодирования."""
         return [
             settings.app.ffmpeg_command,
             "-hide_banner",
             "-loglevel",
             "error",
+            "-ss",
+            str(chunk_start_seconds),
             "-i",
             str(input_path),
             "-map",
             "0",
             "-c",
             "copy",
-            "-f",
-            "segment",
-            "-segment_time",
+            "-t",
             str(chunk_seconds),
             "-reset_timestamps",
             "1",
-            "-segment_format",
-            "mp4",
-            str(output_pattern),
+            "-y",
+            str(output_path),
         ]
 
     def build_ffmpeg_chunk_command(

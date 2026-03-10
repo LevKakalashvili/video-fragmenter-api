@@ -13,7 +13,9 @@ class JobStateHandler(ABC):
         pass
 
     @abstractmethod
-    async def mark_job_started(self, job_id: UUID, file_id: UUID, chunks_total_estimate: int) -> None:
+    async def mark_job_started(
+        self, job_id: UUID, file_id: UUID, chunks_total_estimate: int
+    ) -> None:
         """Фиксирует переход job в состояние started."""
         pass
 
@@ -55,7 +57,9 @@ class JobStateHandler(ABC):
         pass
 
     @abstractmethod
-    async def mark_job_completed(self, job_id: UUID, file_id: UUID, chunks_done: int, manifest_key: str) -> None:
+    async def mark_job_completed(
+        self, job_id: UUID, file_id: UUID, chunks_done: int, manifest_key: str
+    ) -> None:
         """Фиксирует успешное завершение job."""
         pass
 

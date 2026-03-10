@@ -5,7 +5,12 @@ from typing import Any
 
 import aioboto3
 from botocore.config import Config
-from botocore.exceptions import ClientError, ConnectTimeoutError, EndpointConnectionError, ReadTimeoutError
+from botocore.exceptions import (
+    ClientError,
+    ConnectTimeoutError,
+    EndpointConnectionError,
+    ReadTimeoutError,
+)
 
 from src.core.settings import settings
 from src.domain.errors import DomainError, S3ObjectNotFoundError
@@ -50,15 +55,24 @@ class S3Repository:
             code = str(exc.response.get("Error", {}).get("Code", ""))
             if code in {"NoSuchKey", "404", "NotFound"}:
                 raise S3ObjectNotFoundError(bucket=bucket, key=key) from exc
-            raise DomainError(f"Ошибка S3 при HEAD s3://{bucket}/{key}. Код={code}. Детали: {exc}") from exc
-        except (EndpointConnectionError, ConnectTimeoutError, ReadTimeoutError, TimeoutError) as exc:
+            raise DomainError(
+                f"Ошибка S3 при HEAD s3://{bucket}/{key}. Код={code}. Детали: {exc}"
+            ) from exc
+        except (
+            EndpointConnectionError,
+            ConnectTimeoutError,
+            ReadTimeoutError,
+            TimeoutError,
+        ) as exc:
             raise DomainError(
                 "Таймаут/ошибка соединения при HEAD "
                 f"s3://{bucket}/{key}. connect_timeout={settings.minio.connect_timeout_seconds}s, "
                 f"read_timeout={settings.minio.read_timeout_seconds}s. Детали: {exc}",
             ) from exc
         except Exception as exc:
-            raise DomainError(f"Ошибка получения метаданных объекта {bucket}/{key}. Детали: {exc}") from exc
+            raise DomainError(
+                f"Ошибка получения метаданных объекта {bucket}/{key}. Детали: {exc}"
+            ) from exc
 
         return S3ObjectMeta(
             bucket=bucket,
@@ -78,8 +92,15 @@ class S3Repository:
             code = str(exc.response.get("Error", {}).get("Code", ""))
             if code in {"NoSuchKey", "404", "NotFound"}:
                 raise S3ObjectNotFoundError(bucket=bucket, key=key) from exc
-            raise DomainError(f"Ошибка S3 при скачивании s3://{bucket}/{key}. Код={code}. Детали: {exc}") from exc
-        except (EndpointConnectionError, ConnectTimeoutError, ReadTimeoutError, TimeoutError) as exc:
+            raise DomainError(
+                f"Ошибка S3 при скачивании s3://{bucket}/{key}. Код={code}. Детали: {exc}"
+            ) from exc
+        except (
+            EndpointConnectionError,
+            ConnectTimeoutError,
+            ReadTimeoutError,
+            TimeoutError,
+        ) as exc:
             raise DomainError(
                 "Таймаут/ошибка соединения при скачивании "
                 f"s3://{bucket}/{key}. connect_timeout={settings.minio.connect_timeout_seconds}s, "
@@ -122,13 +143,6 @@ class S3Repository:
                 ContentType=content_type,
             )
 
-    async def object_exists(self, bucket: str, key: str) -> bool:
-        try:
-            await self.head_object(bucket=bucket, key=key)
-        except S3ObjectNotFoundError:
-            return False
-        return True
-
     async def ensure_bucket_available(self, bucket: str | None = None) -> None:
         target_bucket = bucket or settings.minio.bucket
         try:
@@ -136,10 +150,3 @@ class S3Repository:
                 await client.head_bucket(Bucket=target_bucket)
         except Exception as exc:
             raise DomainError(f"Недоступен bucket s3://{target_bucket}. Детали: {exc}") from exc
-
-    async def is_bucket_available(self, bucket: str | None = None) -> bool:
-        try:
-            await self.ensure_bucket_available(bucket=bucket)
-        except DomainError:
-            return False
-        return True

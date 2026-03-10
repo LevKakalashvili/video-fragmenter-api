@@ -143,10 +143,15 @@ try:
 except ValidationError as exc:
     for error in exc.errors():
         error_type = error.get("type", "validation_error")
-        error_message = _translate_error_message(error.get("msg", "Некорректное значение переменной окружения"))
+        error_message = _translate_error_message(
+            error.get("msg", "Некорректное значение переменной окружения")
+        )
         error_loc = tuple(error.get("loc", ()))
         env_name = _env_name_from_error_loc(error_loc)
         error_type_ru = _translate_error_type(error_type)
 
-        logger.error(f"{error_type_ru} поле окружения: {env_name}. Расположение: {error_loc}. {error_message}")
+        logger.error(
+            f"{error_type_ru} поле окружения: {env_name}. "
+            f"Расположение: {error_loc}. {error_message}"
+        )
     sys.exit(1)

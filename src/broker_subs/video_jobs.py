@@ -37,7 +37,9 @@ async def handle_video_job_event(
     job_state_service: FromDishka[JobStateService],
 ) -> None:
     job_id = uuid4()
-    logger.info(f"Получено событие задачи на фрагментацию видео: {data}, сгенерированный job_id={job_id}")
+    logger.info(
+        f"Получено событие задачи на фрагментацию видео: {data}, сгенерированный job_id={job_id}"
+    )
     await job_state_service.reset_job_state(job_id=job_id, payload=data)
     logger.info(
         "Задача поставлена в in-memory scheduler: job_id={}, file_id={}, queue_limit_K={}",
@@ -45,4 +47,6 @@ async def handle_video_job_event(
         data.file_id,
         settings.app.max_videos_in_progress,
     )
-    await video_scheduler.submit(lambda: video_job_service.process_video_job(job_id=job_id, payload=data))
+    await video_scheduler.submit(
+        lambda: video_job_service.process_video_job(job_id=job_id, payload=data)
+    )

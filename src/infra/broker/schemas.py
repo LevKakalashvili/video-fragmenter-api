@@ -72,10 +72,3 @@ class KafkaVideoJobFinalEventSchema(BaseModel):
     manifest_key: str
     error: str = ""
     ts: datetime
-
-
-class KafkaVideoJobProgressSchema(BaseModel):
-    """Упрощенная совместимая схема прогресса (устаревает)."""
-
-    template_id: UUID
-    status: Literal["created"] = "created"

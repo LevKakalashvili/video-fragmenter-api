@@ -20,7 +20,9 @@ class KafkaJobStateHandler(JobStateHandler):
         # Kafka не хранит состояние, поэтому reset здесь не нужен.
         return None
 
-    async def mark_job_started(self, job_id: UUID, file_id: UUID, chunks_total_estimate: int) -> None:
+    async def mark_job_started(
+        self, job_id: UUID, file_id: UUID, chunks_total_estimate: int
+    ) -> None:
         # Публикуем только внешний progress event без локального состояния.
         event = KafkaVideoJobProgressEventSchema(
             job_id=job_id,
@@ -80,7 +82,9 @@ class KafkaJobStateHandler(JobStateHandler):
         # Ошибку чанка агрегируем на уровень job_failed, чтобы не дублировать события.
         return None
 
-    async def mark_job_completed(self, job_id: UUID, file_id: UUID, chunks_done: int, manifest_key: str) -> None:
+    async def mark_job_completed(
+        self, job_id: UUID, file_id: UUID, chunks_done: int, manifest_key: str
+    ) -> None:
         # Финальное completed-событие отправляется отдельной схемой.
         event = KafkaVideoJobFinalEventSchema(
             job_id=job_id,
@@ -122,5 +126,7 @@ class KafkaJobStateHandler(JobStateHandler):
             error=error_text,
             ts=datetime.now(UTC),
         )
-        await self.producer.publish_progress(progress_event.model_dump(mode="json"), key=str(file_id))
+        await self.producer.publish_progress(
+            progress_event.model_dump(mode="json"), key=str(file_id)
+        )
         await self.producer.publish_progress(final_event.model_dump(mode="json"), key=str(file_id))

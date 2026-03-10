@@ -4,7 +4,11 @@ from redis.asyncio import Redis
 
 from src.infra.broker.producer import KafkaProducer
 from src.infra.broker.schemas import KafkaVideoJobInSchema
-from src.services.job_state_handlers import JobStateHandler, KafkaJobStateHandler, RedisJobStateHandler
+from src.services.job_state_handlers import (
+    JobStateHandler,
+    KafkaJobStateHandler,
+    RedisJobStateHandler,
+)
 
 
 class JobStateService:
@@ -28,7 +32,9 @@ class JobStateService:
                 return False
         return True
 
-    async def mark_job_started(self, job_id: UUID, file_id: UUID, chunks_total_estimate: int) -> None:
+    async def mark_job_started(
+        self, job_id: UUID, file_id: UUID, chunks_total_estimate: int
+    ) -> None:
         if not await self.is_current_job(file_id=file_id, job_id=job_id):
             return
         for handler in self.handlers:
@@ -97,7 +103,9 @@ class JobStateService:
                 chunks_total_estimate=chunks_total_estimate,
             )
 
-    async def mark_job_completed(self, job_id: UUID, file_id: UUID, chunks_done: int, manifest_key: str) -> None:
+    async def mark_job_completed(
+        self, job_id: UUID, file_id: UUID, chunks_done: int, manifest_key: str
+    ) -> None:
         if not await self.is_current_job(file_id=file_id, job_id=job_id):
             return
         for handler in self.handlers:

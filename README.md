@@ -77,6 +77,14 @@
 ```text
 Kafka -> download -> fragment -> upload -> Kafka events
 ```
+
+Текущая граница ответственности в коде:
+
+- `VideoJobService` отвечает за orchestration: download, построение chunk jobs, state, progress events, manifest, cleanup временной директории задачи.
+- `FfmpegChunkExecutionService` отвечает только за выполнение одного chunk: build command, subprocess, проверка output, normalized result/error.
+- `S3ChunkUploadService` отвечает только за upload одного готового chunk: build chunk key, upload, cleanup локального файла, normalized result/error.
+- `S3ManifestService` отвечает только за сборку и upload manifest.json: build payload, manifest key, JSON serialization, normalized result/error.
+- `FfprobeVideoProbeService` отвечает только за анализ локального видеофайла через ffprobe: build command, subprocess, parsing, metadata validation, normalized result/error.
 ------------------------------------------------------------------------
 
 ## 3.2 Batch consume из Kafka

@@ -33,7 +33,9 @@ class InterceptHandler(logging.Handler):
         message = record.getMessage()
         if record.name.startswith("uvicorn"):
             if record.msg == "Started server process [%d]" and record.args:
-                message = self.UVICORN_TRANSLATIONS["Started server process [{pid}]"].format(pid=record.args[0])
+                message = self.UVICORN_TRANSLATIONS["Started server process [{pid}]"].format(
+                    pid=record.args[0]
+                )
             else:
                 message = self.UVICORN_TRANSLATIONS.get(message, message)
 
@@ -44,7 +46,8 @@ def init_logging(is_debug: bool = False) -> None:
     log_level = logging.DEBUG if is_debug else logging.INFO
 
     handler = InterceptHandler()
-    # logging.basicConfig(handlers=[handler], level=log_level)  # распространяет логи на все подкапотные либы
+    # logging.basicConfig(handlers=[handler], level=log_level)
+    # распространяет логи на все подкапотные либы
 
     loggers = (logging.getLogger(name) for name in logging.root.manager.loggerDict)
     for log in loggers:
