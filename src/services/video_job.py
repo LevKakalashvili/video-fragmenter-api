@@ -65,11 +65,17 @@ class VideoJobService:
 
     async def publish_progress_event(self, event: KafkaVideoJobProgressEventSchema) -> None:
         """Публикует промежуточное событие прогресса в Kafka."""
-        await self.producer.publish_progress(event.model_dump(mode="json"))
+        await self.producer.publish_progress(
+            event.model_dump(mode="json"),
+            key=str(event.file_id),
+        )
 
     async def publish_final_event(self, event: KafkaVideoJobFinalEventSchema) -> None:
         """Публикует финальное событие задачи в Kafka."""
-        await self.producer.publish_progress(event.model_dump(mode="json"))
+        await self.producer.publish_progress(
+            event.model_dump(mode="json"),
+            key=str(event.file_id),
+        )
 
     async def publish_started_event(self, job_id: UUID, file_id: UUID, chunks_total_estimate: int) -> None:
         """Формирует и публикует событие старта обработки."""
@@ -259,18 +265,6 @@ class VideoJobService:
                     ts=datetime.now(UTC),
                 )
             )
-            await self.publish_progress_event(
-                KafkaVideoJobProgressEventSchema(
-                    job_id=job_id,
-                    file_id=payload.file_id,
-                    status="completed",
-                    chunk_index=max(0, chunks_done - 1),
-                    chunk_key=manifest_key,
-                    chunks_done=chunks_done,
-                    chunks_total_estimate=chunks_total_estimate,
-                    ts=datetime.now(UTC),
-                )
-            )
             logger.info(
                 "Видео job завершен: job_id={}, file_id={}, chunks_done={}", job_id, payload.file_id, chunks_done
             )
@@ -332,14 +326,16 @@ class VideoJobService:
         for _ in range(workers_total):
             chunk_queue.put_nowait(None)
 
+        # Количество уже отправленных в Kafka chunk_uploaded событий.
         chunks_done = 0
-        # Защищает инкремент chunks_done от гонки между worker-ами.
-        chunks_done_lock = asyncio.Lock()
         # Отдельный лимитер upload-операций (может быть меньше/больше M).
         upload_limit = asyncio.Semaphore(max(1, settings.app.max_upload_concurrency))
+        # Буфер готовых чанков: worker кладет сюда результат, publisher забирает по порядку индексов.
+        ready_chunks: dict[int, str] = {}
+        # Condition координирует producer/consumer между worker-ами и publisher-корутинами.
+        ready_chunks_condition = asyncio.Condition()
 
         async def worker() -> None:
-            nonlocal chunks_done
             while True:
                 chunk_index = await chunk_queue.get()
                 try:
@@ -381,38 +377,49 @@ class VideoJobService:
                             local_path=local_chunk_path,
                         )
 
-                    # Обновление счётчика делаем атомарно под lock.
-                    async with chunks_done_lock:
-                        chunks_done += 1
-                        chunks_done_current = chunks_done
-
-                    # Публикуем событие для каждого успешно загруженного чанка.
-                    await self.publish_progress_event(
-                        KafkaVideoJobProgressEventSchema(
-                            job_id=job_id,
-                            file_id=payload.file_id,
-                            status="chunk_uploaded",
-                            chunk_index=chunk_index,
-                            chunk_key=chunk_key,
-                            chunks_done=chunks_done_current,
-                            chunks_total_estimate=chunks_total_estimate,
-                            ts=datetime.now(UTC),
-                        )
-                    )
-                    logger.info(
-                        f"Chunk обработан: job_id={job_id}, file_id={payload.file_id}, "
-                        f"chunk_index={chunk_index}, chunks_done={chunks_done_current}/{chunks_total_estimate}"
-                    )
                     # Локальный чанк больше не нужен после успешной загрузки.
                     self.remove_local_file(local_chunk_path)
+                    # После upload чанк "готов к публикации", но само событие отправим
+                    # отдельной корутиной строго по chunk_index.
+                    async with ready_chunks_condition:
+                        ready_chunks[chunk_index] = chunk_key
+                        ready_chunks_condition.notify_all()
                 finally:
                     # task_done обязателен в finally: и при успехе, и при ошибке.
                     chunk_queue.task_done()
+
+        async def publish_chunks_in_order() -> None:
+            nonlocal chunks_done
+            for chunk_index in range(chunks_total_estimate):
+                async with ready_chunks_condition:
+                    # Ждём именно текущий индекс, чтобы сообщения в Kafka шли в детерминированном порядке.
+                    while chunk_index not in ready_chunks:
+                        await ready_chunks_condition.wait()
+                    chunk_key = ready_chunks.pop(chunk_index)
+
+                chunks_done += 1
+                await self.publish_progress_event(
+                    KafkaVideoJobProgressEventSchema(
+                        job_id=job_id,
+                        file_id=payload.file_id,
+                        status="chunk_uploaded",
+                        chunk_index=chunk_index,
+                        chunk_key=chunk_key,
+                        chunks_done=chunks_done,
+                        chunks_total_estimate=chunks_total_estimate,
+                        ts=datetime.now(UTC),
+                    )
+                )
+                logger.info(
+                    f"Chunk обработан: job_id={job_id}, file_id={payload.file_id}, "
+                    f"chunk_index={chunk_index}, chunks_done={chunks_done}/{chunks_total_estimate}"
+                )
 
         # TaskGroup упрощает fan-out/fan-in:
         # если один worker падает, группа отменяет остальные и пробрасывает ошибку наружу.
         async with asyncio.TaskGroup() as task_group:
             for _ in range(workers_total):
                 task_group.create_task(worker())
+            task_group.create_task(publish_chunks_in_order())
 
         return chunks_done
