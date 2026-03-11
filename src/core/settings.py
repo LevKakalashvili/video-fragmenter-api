@@ -1,9 +1,11 @@
+import json
 import sys
+from typing import Annotated
 from typing import Literal
 
 from loguru import logger
 from pydantic import Field, ValidationError, field_validator
-from pydantic_settings import BaseSettings, SettingsConfigDict
+from pydantic_settings import BaseSettings, NoDecode, SettingsConfigDict
 
 from src.core.utils import _env_name_from_error_loc, _translate_error_message, _translate_error_type
 
@@ -39,7 +41,9 @@ class AppSettings(_BaseEnvSettings):
     # Максимально допустимый размер входного файла в байтах (500 MB).
     max_file_bytes: int = 500 * 1024 * 1024
     # Поддерживаемые видеоформаты входных файлов.
-    supported_video_formats: list[str] = Field(default_factory=lambda: ["mp4"])
+    supported_video_formats: Annotated[list[str], NoDecode] = Field(
+        default_factory=lambda: ["mp4"]
+    )
     # Корень временного каталога для локальных артефактов обработки.
     tmp_dir_root: str = "/tmp"
     ffmpeg_command: str = "ffmpeg"
@@ -49,6 +53,14 @@ class AppSettings(_BaseEnvSettings):
     @classmethod
     def _normalize_supported_video_formats(cls, value: object) -> object:
         if isinstance(value, str):
+            stripped = value.strip()
+            if stripped.startswith("["):
+                try:
+                    decoded = json.loads(stripped)
+                except json.JSONDecodeError:
+                    pass
+                else:
+                    return decoded
             return [item.strip() for item in value.split(",") if item.strip()]
         return value
 
